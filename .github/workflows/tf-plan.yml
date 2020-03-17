@@ -6,7 +6,7 @@ env:
   TF_VERSION: 0.12.20
 
 jobs:
-  terraform-plan-staging:
+  terraform-plan:
     strategy:
       matrix:
         workspace: [st-test-results-bucket_us-east-1,
