@@ -97,3 +97,7 @@ jobs:
         with:
           name: terraform-plan-${{ env.WORKSPACE }}
           path: ${{ steps.terraform-plan.outputs.tf_actions_plan_output_file }}
+
+      - name: Cleanup AWS Credentials
+        run: |
+          rm -rf .aws

@@ -142,3 +142,7 @@ jobs:
           TF_WORKSPACE: ${{ env.WORKSPACE }}
           AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup AWS Credentials
+        run: |
+          rm -rf .aws
