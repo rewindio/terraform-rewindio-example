@@ -1,0 +1,144 @@
+name: terraform-apply
+
+on: 
+  issue_comment: 
+    types: [created]
+
+env:
+  TF_VERSION: 0.12.20
+
+# Jobs run in parallel, steps run sequentially.
+
+jobs:
+  terraform-apply-staging:
+    # Only run for comments starting with "terraform " in a pull request.
+    if: >
+      startsWith(github.event.comment.body, 'terraform apply')
+      && startsWith(github.event.issue.pull_request.url, 'https://')
+
+    strategy:
+      matrix:
+        workspace: [st-test-results-bucket_us-east-1,
+                    pd-test-results-bucket_us-east-1]
+
+    name: ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+
+    env:
+      WORKSPACE: ${{ matrix.workspace }}
+
+    steps:
+      - name: Generate tfvars Path 
+        id: tfvars
+        run: |
+          if [[ "${WORKSPACE}" == "st"* ]]; then
+            echo "::set-output name=tfvars_file::tfvars/staging/${WORKSPACE}.tfvars"
+            echo "::set-output name=env_name::staging"
+          elif [[ "${WORKSPACE}" == "pd"* ]]; then
+            echo "::set-output name=tfvars_file::tfvars/production/${WORKSPACE}.tfvars"
+            echo "::set-output name=env_name::production"
+          else
+            echo "::set-output name=tfvars_file::UNKNOWN"
+            echo "::set-output name=env_name::UNKNOWN"
+          fi
+
+      # This step is needed because a comment on a PR is is in the scope of an issue
+      - name: 'Load PR Details'
+        id: load-pr
+        run: |
+          set -eu
+          resp=$(curl -sSf \
+            --url ${{ github.event.issue.pull_request.url }} \
+            --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'content-type: application/json')
+          sha=$(jq -r '.head.sha' <<< "$resp")
+          echo "::set-output name=head_sha::$sha"
+          comments_url=$(jq -r '.comments_url' <<< "$resp")
+          echo "::set-output name=comments_url::$comments_url"
+
+      - name: Determine Command
+        id: determine-command
+        uses: actions/github-script@0.2.0
+        env:
+          ENV_NAME: ${{ steps.tfvars.outputs.env_name }}
+        with:
+          github-token: ${{github.token}}
+          script: |
+            // console.log(context)
+            const body = context.payload.comment.body.toLowerCase().trim()
+            console.log("Detected PR comment: " + body)
+            console.log("This job is for workspace " + process.env.WORKSPACE)
+
+            commandArray = body.split(/\s+/)
+            if (commandArray[0] == "terraform") {
+              action = commandArray[1]
+
+              switch(action) {
+                case "apply":
+                  console.log("Validating apply action is for this job")
+
+                  if(typeof commandArray[2] === 'undefined') {
+                    console.log("Applying to all workspaces")
+                    console.log("::set-output name=do_apply::true")
+                  } else if (commandArray[2] == process.env.WORKSPACE) {
+                    console.log("applying to this workspace " + commandArray[2])
+                    console.log("::set-output name=do_apply::true")
+                  } else if (commandArray[2] == process.env.ENV_NAME) {
+                    console.log("applying to this environment " + commandArray[2])
+                    console.log("::set-output name=do_apply::true")
+                  } else {
+                    console.log("terraform apply command is not for this job")
+                  }
+                  break
+              }
+            }
+
+      - name: Checkout
+        if: steps.determine-command.outputs.do_apply == 'true'        
+        uses: actions/checkout@1.0.0
+        with:
+          # By default (in a non-pull request build) you get HEAD of 'master'
+          ref: ${{ steps.load-pr.outputs.head_sha }}
+          submodules: 'true'
+          token: ${{ secrets.deploy_user_PAT }} # Needed for private submodules
+
+      - name: Setup AWS Credentials
+        if: steps.determine-command.outputs.do_apply == 'true'
+        run: |
+          # Setup the credentials in the workspace because everything in terraform is
+          # driven off profiles
+          mkdir -p .aws
+
+          echo "[staging]" > .aws/credentials
+          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}" >> .aws/credentials
+          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}" >> .aws/credentials
+
+          echo "[production]" >> .aws/credentials
+          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}" >> .aws/credentials
+          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}" >> .aws/credentials
+
+      - name: Terraform Init
+        uses: rewindio/terraform-github-actions@master
+        if: steps.determine-command.outputs.do_apply == 'true'
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: init
+          args: -backend-config backend/backend.tfvars
+        env:
+          TF_WORKSPACE: ${{ env.WORKSPACE }}
+          AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Apply
+        if: steps.determine-command.outputs.do_apply == 'true'
+        uses: rewindio/terraform-github-actions@master
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: apply
+          tf_actions_comment: true
+          tf_actions_comment_url: ${{ steps.load-pr.outputs.comments_url }}
+          args: -var-file backend/backend.tfvars -var-file ${{ steps.tfvars.outputs.tfvars_file }}
+        env:
+          TF_WORKSPACE: ${{ env.WORKSPACE }}
+          AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

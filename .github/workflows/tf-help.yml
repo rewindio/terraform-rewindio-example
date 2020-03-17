@@ -1,0 +1,52 @@
+name: terraform-help
+
+on: 
+  issue_comment: 
+    types: [created]
+
+jobs:
+  show-help:
+    # Only run for comments starting with "terraform help" in a pull request.
+    if: >
+      startsWith(github.event.comment.body, 'terraform help')
+      && startsWith(github.event.issue.pull_request.url, 'https://')
+
+    name: Terraform Show Help
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Load PR Details'
+        id: load-pr
+        run: |
+          set -eu
+          resp=$(curl -sSf \
+            --url ${{ github.event.issue.pull_request.url }} \
+            --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'content-type: application/json')
+          sha=$(jq -r '.head.sha' <<< "$resp")
+          echo "::set-output name=head_sha::$sha"
+          comments_url=$(jq -r '.comments_url' <<< "$resp")
+          echo "::set-output name=comments_url::$comments_url"
+
+      - name: Checkout
+        uses: actions/checkout@1.0.0
+        with:
+          # By default (in a non-pull request build) you get HEAD of 'master'
+          ref: ${{ steps.load-pr.outputs.head_sha }}
+          submodules: 'true'
+          token: ${{ secrets.deploy_user_PAT }} # Needed for private submodules
+
+      - name: Show Help
+        env:
+          COMMENTS_URL: ${{ steps.load-pr.outputs.comments_url }}
+        run: |
+          set -eu
+          echo "Sending help text to: $COMMENTS_URL"
+          helpPayload=$(cat .github/workflows/tf-help.md | jq -R --slurp '{body: .}')
+
+          resp=$(echo $helpPayload | curl -sSf \
+            --url $COMMENTS_URL \
+            --data @- \
+            --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'content-type: application/json')
+          echo "Adding comment returned: $resp"

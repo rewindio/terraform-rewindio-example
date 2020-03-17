@@ -1,0 +1,99 @@
+name: terraform-plan
+
+on: pull_request
+
+env:
+  TF_VERSION: 0.12.20
+
+jobs:
+  terraform-plan-staging:
+    strategy:
+      matrix:
+        workspace: [st-test-results-bucket_us-east-1,
+                    pd-test-results-bucket_us-east-1]
+
+    name: ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+
+    env:
+      WORKSPACE: ${{ matrix.workspace }}
+
+    steps:
+      - name: Generate tfvars Path 
+        id: tfvars
+        run: |
+          if [[ "${WORKSPACE}" == "st"* ]]; then
+            echo "::set-output name=tfvars_file::tfvars/staging/${WORKSPACE}.tfvars"
+          elif [[ "${WORKSPACE}" == "pd"* ]]; then
+            echo "::set-output name=tfvars_file::tfvars/production/${WORKSPACE}.tfvars"
+          else
+            echo "::set-output name=tfvars_file::UNKNOWN"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@1.0.0
+        with:
+          submodules: 'true'
+          token: ${{ secrets.deploy_user_PAT }} # Needed for private submodules
+
+      - name: Setup AWS Credentials
+        run: |
+          # Setup the credentials in the workspace because everything in terraform is
+          # driven off profiles
+          mkdir -p .aws
+
+          echo "[staging]" > .aws/credentials
+          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}" >> .aws/credentials
+          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}" >> .aws/credentials
+
+          # Production is needed because all of the TF state is stored in prod S3
+          echo "[production]" >> .aws/credentials
+          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}" >> .aws/credentials
+          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}" >> .aws/credentials
+
+      - name: Terraform Format
+        uses: rewindio/terraform-github-actions@master
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: fmt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Init
+        uses: rewindio/terraform-github-actions@master
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: init
+          args: -backend-config backend/backend.tfvars
+        env:
+          TF_WORKSPACE: ${{ env.WORKSPACE }}
+          AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Validate
+        uses: rewindio/terraform-github-actions@master
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: validate
+        env:
+          TF_WORKSPACE: ${{ env.WORKSPACE }}
+          AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Plan
+        id: terraform-plan
+        uses: rewindio/terraform-github-actions@master
+        with:
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tf_actions_subcommand: plan
+          args: -var-file backend/backend.tfvars -var-file ${{ steps.tfvars.outputs.tfvars_file }}
+        env:
+          TF_WORKSPACE: ${{ env.WORKSPACE }}
+          AWS_SHARED_CREDENTIALS_FILE: .aws/credentials
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: terraform-plan-${{ env.WORKSPACE }}
+          path: ${{ steps.terraform-plan.outputs.tf_actions_plan_output_file }}
