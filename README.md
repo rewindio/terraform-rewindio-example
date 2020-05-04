@@ -2,7 +2,7 @@
 
 An example repo showing the general layout of most of our Terraform repos at Rewind and illustrating how the Terraform Github actions are configured.
 
-This repo is an example to accompany the blog post at TBD
+This repo is an example to accompany the blog post [Automated Terraform Deployments to AWS with Github Actions](https://medium.com/@dnorth98/automated-terraform-deployments-to-aws-with-github-actions-c590c065c179)
 
 ## Usage
 
