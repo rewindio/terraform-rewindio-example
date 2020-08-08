@@ -8,7 +8,7 @@ provider "aws" {
   version = "~> 2.0"
   alias   = "edge_provider"
   profile = var.aws_profile
-  region  = "us-east-1"
+  region  = "ap-southeast-2"
 }
 
 # The backend config variables come from a backend.tfvars file
@@ -18,8 +18,8 @@ terraform {
   }
 }
 
-resource "aws_s3_bucket" "test_results" {
-  bucket = var.test_results_bucket_name
+resource "aws_s3_bucket" "test_results22" {
+  bucket = var.test_results22_bucket_name
   acl    = "private"
 
   server_side_encryption_configuration {
@@ -33,6 +33,6 @@ resource "aws_s3_bucket" "test_results" {
   tags = {
     product     = "common"
     platform    = "common"
-    bucket_name = var.test_results_bucket_name
+    bucket_name = var.test_results22_bucket_name
   }
 }

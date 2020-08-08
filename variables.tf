@@ -29,13 +29,13 @@ variable "external_ip_allow_list" {
 variable "aws_profile" {
 }
 
-variable "test_results_bucket_name" {
+variable "test_results22_bucket_name" {
 }
 
 
 locals {
   # all of our workspaces are named using the format envrionent_variable-text_aws-region
-  # ex: st-test-results_us-east-1, pd-test-results_us-east-1
+  # ex: st-test-results_ap-southeast-2, pd-test-results_ap-southeast-2
   terraform_workspace_components = split("_", terraform.workspace)
 
   aws_region = element(local.terraform_workspace_components, 1)

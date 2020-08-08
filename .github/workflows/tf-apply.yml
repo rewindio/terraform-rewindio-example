@@ -18,8 +18,8 @@ jobs:
 
     strategy:
       matrix:
-        workspace: [st-test-results-bucket_us-east-1,
-                    pd-test-results-bucket_us-east-1]
+        workspace: [st-test-results22-bucket_ap-southeast-2,
+                    pd-test-results22-bucket_ap-southeast-2]
 
     name: ${{ matrix.workspace }}
     runs-on: ubuntu-latest
@@ -32,8 +32,8 @@ jobs:
         id: tfvars
         run: |
           if [[ "${WORKSPACE}" == "st"* ]]; then
-            echo "::set-output name=tfvars_file::tfvars/staging/${WORKSPACE}.tfvars"
-            echo "::set-output name=env_name::staging"
+            echo "::set-output name=tfvars_file::tfvars/default/${WORKSPACE}.tfvars"
+            echo "::set-output name=env_name::default"
           elif [[ "${WORKSPACE}" == "pd"* ]]; then
             echo "::set-output name=tfvars_file::tfvars/production/${WORKSPACE}.tfvars"
             echo "::set-output name=env_name::production"
@@ -109,9 +109,9 @@ jobs:
           # driven off profiles
           mkdir -p .aws
 
-          echo "[staging]" > .aws/credentials
-          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}" >> .aws/credentials
-          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}" >> .aws/credentials
+          echo "[default]" > .aws/credentials
+          echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_default }}" >> .aws/credentials
+          echo "aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_default }}" >> .aws/credentials
 
           echo "[production]" >> .aws/credentials
           echo "aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}" >> .aws/credentials
