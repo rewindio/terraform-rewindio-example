@@ -1,11 +1,11 @@
 provider "aws" {
-  version = "~> 2.0"
+  version = "~> 3.0"
   profile = var.aws_profile
   region  = local.aws_region
 }
 
 provider "aws" {
-  version = "~> 2.0"
+  version = "~> 3.0"
   alias   = "edge_provider"
   profile = var.aws_profile
   region  = "us-east-1"
