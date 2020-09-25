@@ -8,6 +8,7 @@ env:
 jobs:
   terraform-plan:
     strategy:
+      fail-fast: false
       matrix:
         workspace: [st-test-results-bucket_us-east-1,
                     pd-test-results-bucket_us-east-1]
